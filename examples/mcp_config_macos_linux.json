@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "eis-ecm-drt": {
+      "command": "/path/to/EIS-Analysis-mcp/run_mcp.sh",
+      "args": []
+    }
+  }
+}

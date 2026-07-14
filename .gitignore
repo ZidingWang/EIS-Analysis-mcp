@@ -1,0 +1,16 @@
+__pycache__/
+.worktrees/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.coverage
+.venv*/
+dist/
+build/
+results/
+results*/
+outputs/
+outputs*/
+validation_output/
+examples/data/

@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eis-ecm-drt"
+version = "0.3.0"
+description = "Batch EIS analysis MCP server for ECM fitting and DRT inversion."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.14",
+  "scipy>=1.1",
+  "pandas>=0.23",
+  "matplotlib>=2.2",
+  "openpyxl>=2.5",
+]
+keywords = ["battery", "eis", "ecm", "drt", "mcp", "model-context-protocol"]
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering",
+]
+
+[project.optional-dependencies]
+mcp = ["mcp"]
+dev = ["pytest"]
+
+[project.scripts]
+eis-ecm-drt = "eis_ecm_drt.cli:main"
+eis-ecm-drt-mcp = "eis_ecm_drt.server:main"
+
+[tool.setuptools.packages.find]
+include = ["eis_ecm_drt*"]
