@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "eis-ecm-drt"
-version = "0.3.0"
+version = "0.3.2"
 description = "Batch EIS analysis MCP server for ECM fitting and DRT inversion."
 readme = "README.md"
 license = { file = "LICENSE" }

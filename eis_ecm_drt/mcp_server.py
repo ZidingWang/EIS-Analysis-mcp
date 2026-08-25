@@ -14,7 +14,7 @@ from .choices import (
 from .drt import DRTConfig, solve_drt
 from .ecm import ECMConfig, ecm_configs_from_dict, fit_ecm as fit_ecm_core
 from .io import EISData, expand_inputs, read_eis_file
-from .pipeline import analyze_batch
+from .pipeline import _zview_compatibility_fields, analyze_batch
 from .publishing import publish_analysis_results as publish_results_core
 
 
@@ -398,12 +398,18 @@ def _arrays_to_eis(frequency_hz, z_real_ohm, z_imag_ohm):
 
 
 def _ecm_result_response(result, config, freq_hz):
+    zview_fields = _zview_compatibility_fields(result)
     return {
         "success": bool(result.success),
         "model_name": config.model_name,
         "model": config.model,
         "parameters": {key: float(value) for key, value in result.parameters.items()},
         "parameter_names": list(result.parameter_names),
+        "parameter_order": zview_fields.pop("ecm_process_order"),
+        "zview_compatibility": {
+            key: float(value) if isinstance(value, (int, float, np.number)) else value
+            for key, value in zview_fields.items()
+        },
         "metrics": result.metrics,
         "message": result.message,
         "reconstructed": {

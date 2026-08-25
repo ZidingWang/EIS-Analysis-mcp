@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from collections import Counter
 from datetime import datetime
 
@@ -11,7 +12,7 @@ from .drt import DRTConfig, solve_drt
 from .ecm import ECMConfig, ecm_configs_from_dict, fit_ecm
 from .io import expand_inputs, read_eis_file
 from .paths import ensure_output_dir
-from .plotting import plot_drt
+from .plotting import plot_drt, plot_nyquist
 
 
 def analyze_file(
@@ -47,7 +48,21 @@ def analyze_file(
     summary = _summary_row(stem, input_path, data, ecm_config, ecm_result, drt_config, drt_result)
 
     if make_plots:
-        plot_drt(drt_result.tau, drt_result.gamma, paths["drt_plot"])
+        supported_tau_min = 1.0 / (2.0 * np.pi * float(np.max(data.freq_hz)))
+        supported_tau_max = 1.0 / (2.0 * np.pi * float(np.min(data.freq_hz)))
+        plot_drt(
+            drt_result.tau,
+            drt_result.gamma,
+            paths["drt_plot"],
+            supported_tau_min=supported_tau_min,
+            supported_tau_max=supported_tau_max,
+        )
+        plot_nyquist(
+            data.freq_hz,
+            data.z,
+            ecm_z=ecm_result.z_fit,
+            output_path=paths["ecm_plot"],
+        )
 
     if write_readme:
         paths["readme"] = _write_output_readme(
@@ -201,6 +216,7 @@ def _output_paths(output_dir, stem):
         "ecm": os.path.join(output_dir, stem + "_ecm.csv"),
         "drt": os.path.join(output_dir, stem + "_drt.csv"),
         "drt_plot": os.path.join(output_dir, stem + "_drt.png"),
+        "ecm_plot": os.path.join(output_dir, stem + "_ecm_fit.png"),
     }
 
 
@@ -231,11 +247,14 @@ def _write_output_readme(
         "- <样本名>_ecm.csv: 最终选中的一组 ECM 模型参数和拟合指标，每个文件只有一行。",
         "- <样本名>_drt.csv: DRT 曲线数据，包含 tau_s、gamma_ohm 和 integration_weight。",
         "- <样本名>_drt.png: DRT 曲线图。" if make_plots else "- 本次已关闭图片生成，因此没有 DRT PNG。",
+        "- <样本名>_ecm_fit.png: 原始 EIS 与最终 ECM 拟合的 Nyquist 比较图。" if make_plots else "- 本次已关闭图片生成，因此没有 ECM 拟合比较图。",
         "- README_输出说明.txt: 本说明文件。",
         "",
         "本次选择",
         "- ECM 候选模型: %s" % candidate_text,
         "- 多个 ECM 候选模型按 relative_rmse 选择最佳结果。",
+        "- 重复的串联 RC/RQ 支路按特征频率从高到低编号，便于与 ZView 对照。",
+        "- ZView 参数映射: R 使用 Ohm，L 使用 H，C 使用 F，CPE_Q 对应 CPE-T，CPE_n 对应 CPE-P。",
         "- DRT 预设: %s" % preset_label,
         "- DRT 完整参数: %s" % json.dumps(drt_config_to_dict(drt_config), ensure_ascii=False, sort_keys=True),
         "",
@@ -420,7 +439,46 @@ def _selected_ecm_frame(sample, selected):
     }
     for name in result.parameter_names:
         row[name] = result.parameters[name]
+    row.update(_zview_compatibility_fields(result))
     return pd.DataFrame([row])
+
+
+def _zview_compatibility_fields(result):
+    params = result.parameters
+    fields = {
+        "ecm_process_order": "repeated series RC/RQ branches: high-to-low characteristic frequency",
+        "zview_parameter_convention": "R=Ohm; L=H; C=F; CPE_Q=CPE-T; CPE_n=CPE-P",
+    }
+
+    for name, value in params.items():
+        if name.startswith("L"):
+            fields[name + "_H"] = value
+            fields[name + "_uH"] = value * 1e6
+        elif name.lower() in ("r0", "rs", "rinf", "r_infty"):
+            fields["ZView_Rs_ohm"] = value
+        elif name.endswith("_Q"):
+            fields[name[:-2] + "_T"] = value
+        elif name.endswith("_n"):
+            fields[name[:-2] + "_P"] = value
+
+    for name, q_value in params.items():
+        match = re.match(r"^CPE(.+)_Q$", name)
+        if not match:
+            continue
+        suffix = match.group(1)
+        r_name = "R" + suffix
+        n_name = "CPE" + suffix + "_n"
+        if r_name not in params or n_name not in params:
+            continue
+        resistance = float(params[r_name])
+        exponent = float(params[n_name])
+        if resistance <= 0 or float(q_value) <= 0 or exponent <= 0:
+            continue
+        log_frequency = -np.log(resistance * float(q_value)) / exponent - np.log(2.0 * np.pi)
+        fields["RQ%s_characteristic_frequency_hz" % suffix] = float(
+            np.exp(np.clip(log_frequency, -700.0, 700.0))
+        )
+    return fields
 
 
 def _safe_stem(path):

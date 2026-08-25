@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import least_squares
 
-from .circuit import CircuitModel
+from .circuit import CircuitModel, canonicalize_series_process_parameters
 
 
 ECM_MODEL_PRESETS = [
@@ -146,6 +146,7 @@ def fit_ecm(freq_hz, z, config=None):
             max_nfev=config.max_nfev,
         )
         params = dict(zip(names, result.x))
+        params = canonicalize_series_process_parameters(circuit, params)
         z_fit = circuit.impedance(freq_hz, params)
         metrics = _fit_metrics(z, z_fit)
         candidate = (metrics.get("relative_rmse", np.inf), result, params, z_fit, metrics)

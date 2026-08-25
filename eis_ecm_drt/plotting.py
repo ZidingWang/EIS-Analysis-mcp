@@ -75,13 +75,42 @@ def plot_bode(freq_hz, z, ecm_z=None, drt_z=None, output_path=None):
     return fig
 
 
-def plot_drt(tau, gamma, output_path=None):
+def plot_drt(
+    tau,
+    gamma,
+    output_path=None,
+    supported_tau_min=None,
+    supported_tau_max=None,
+):
     fig, ax = plt.subplots(figsize=(6.5, 4.2), dpi=150)
     ax.semilogx(tau, gamma, "-", lw=1.8)
     ax.fill_between(tau, 0.0, gamma, alpha=0.18)
+    limit_label_added = False
+    if supported_tau_min is not None and float(supported_tau_min) > float(np.min(tau)):
+        ax.axvspan(float(np.min(tau)), float(supported_tau_min), color="0.5", alpha=0.08)
+        ax.axvline(
+            float(supported_tau_min),
+            color="0.45",
+            ls=":",
+            lw=1.0,
+            label="frequency-supported limit",
+        )
+        limit_label_added = True
+    if supported_tau_max is not None and float(supported_tau_max) < float(np.max(tau)):
+        ax.axvspan(float(supported_tau_max), float(np.max(tau)), color="0.5", alpha=0.08)
+        ax.axvline(
+            float(supported_tau_max),
+            color="0.45",
+            ls=":",
+            lw=1.0,
+            label=None if limit_label_added else "frequency-supported limit",
+        )
+        limit_label_added = True
     ax.set_xlabel("Relaxation time tau / s")
     ax.set_ylabel("gamma(tau) / Ohm")
     ax.grid(True, which="both", alpha=0.25)
+    if limit_label_added:
+        ax.legend(fontsize=8)
     fig.tight_layout()
     if output_path:
         fig.savefig(output_path)

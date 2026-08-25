@@ -195,6 +195,74 @@ class CircuitModel(object):
         raise KeyError("Unknown parameter: %s" % name)
 
 
+def canonicalize_series_process_parameters(circuit, parameters):
+    """Order interchangeable series RC/RQ processes from high to low frequency.
+
+    Series branches commute, so optimizers may return the same physical
+    processes under different R/CPE indices. Canonical ordering makes exported
+    parameters directly comparable between runs and with ZView circuit labels.
+    """
+    original = dict(parameters)
+    canonical = dict(parameters)
+    root = circuit.root
+    if not isinstance(root, Series):
+        return canonical
+
+    groups = {}
+    for child in root.children:
+        descriptor = _relaxation_branch_descriptor(child, original)
+        if descriptor is not None:
+            groups.setdefault(descriptor["kind"], []).append(descriptor)
+
+    for branches in groups.values():
+        if len(branches) < 2:
+            continue
+        sources = sorted(branches, key=lambda item: item["frequency_hz"], reverse=True)
+        for target, source in zip(branches, sources):
+            canonical[target["r_name"]] = original[source["r_name"]]
+            canonical[target["reactive_names"][0]] = original[source["reactive_names"][0]]
+            if len(target["reactive_names"]) == 2:
+                canonical[target["reactive_names"][1]] = original[source["reactive_names"][1]]
+    return canonical
+
+
+def _relaxation_branch_descriptor(node, parameters):
+    if not isinstance(node, Parallel) or len(node.children) != 2:
+        return None
+    if not all(isinstance(child, Element) for child in node.children):
+        return None
+
+    resistor = next((child for child in node.children if child.kind == "R"), None)
+    reactive = next((child for child in node.children if child.kind in ("C", "CPE")), None)
+    if resistor is None or reactive is None:
+        return None
+
+    resistance = float(parameters[resistor.name])
+    if resistance <= 0:
+        return None
+    if reactive.kind == "C":
+        reactive_names = [reactive.name]
+        value = float(parameters[reactive.name])
+        if value <= 0:
+            return None
+        frequency_hz = 1.0 / (2.0 * np.pi * resistance * value)
+    else:
+        reactive_names = [reactive.name + "_Q", reactive.name + "_n"]
+        q_value = float(parameters[reactive_names[0]])
+        n_value = float(parameters[reactive_names[1]])
+        if q_value <= 0 or n_value <= 0:
+            return None
+        log_frequency = -np.log(resistance * q_value) / n_value - np.log(2.0 * np.pi)
+        frequency_hz = float(np.exp(np.clip(log_frequency, -700.0, 700.0)))
+
+    return {
+        "kind": reactive.kind,
+        "r_name": resistor.name,
+        "reactive_names": reactive_names,
+        "frequency_hz": float(frequency_hz),
+    }
+
+
 def parse_circuit(expression):
     text = (expression or "").replace(" ", "")
     if not text:

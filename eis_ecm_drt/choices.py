@@ -34,13 +34,13 @@ CUSTOM_ECM_EXAMPLES = [
 _DRT_SHARED = {
     "tau_min": None, "tau_max": None, "regularization_order": 1,
     "basis_function": "gaussian", "polarization_removal": "ignore_polarization",
-    "boundary_suppression_factor": 10.0, "nonnegative": True,
+    "boundary_suppression_factor": 1.0, "nonnegative": True,
     "fit_r_inf": True, "fit_inductance": True, "weighting": "modulus",
 }
 
 DRT_PRESETS = [
     {"id": "balanced", "display_name": "Balanced / common", "description": "Common balanced analysis.",
-     "recommended": True, "config": dict(_DRT_SHARED, lambda_value=10.0, n_tau=750, shape_factor=4.0, n_basis=120)},
+     "recommended": True, "config": dict(_DRT_SHARED, lambda_value=10.0, n_tau=750, shape_factor=4.5, n_basis=120)},
     {"id": "smooth", "display_name": "Smooth / noise resistant",
      "description": "Stronger smoothing for noisy data; may merge weak nearby peaks.",
      "recommended": False, "config": dict(_DRT_SHARED, lambda_value=30.0, n_tau=750, shape_factor=5.0, n_basis=100)},

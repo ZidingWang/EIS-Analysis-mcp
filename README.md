@@ -21,7 +21,7 @@
 ### 安装与启动
 
 ```powershell
-git clone <你的 GitHub 仓库地址>
+git clone https://github.com/ZidingWang/EIS-Analysis-mcp.git
 cd EIS-Analysis-mcp
 .\run_mcp.cmd
 ```
@@ -29,7 +29,7 @@ cd EIS-Analysis-mcp
 macOS / Linux：
 
 ```bash
-git clone <your GitHub repository URL>
+git clone https://github.com/ZidingWang/EIS-Analysis-mcp.git
 cd EIS-Analysis-mcp
 chmod +x run_mcp.sh eis-analysis.sh
 ./run_mcp.sh
@@ -91,12 +91,14 @@ DRT 使用推荐参数
 
 | DRT 预设 | λ | n_tau | shape_factor | n_basis | 用途 |
 | --- | ---: | ---: | ---: | ---: | --- |
-| `balanced`（推荐） | 10 | 750 | 4 | 120 | 常用平衡分析 |
+| `balanced`（推荐） | 10 | 750 | 4.5 | 120 | 常用平衡分析 |
 | `smooth` | 30 | 750 | 5 | 100 | 噪声数据，曲线更平滑 |
 | `high_resolution` | 3 | 1000 | 3 | 180 | 保留更多细节，耗时和过拟合风险更高 |
 | `fast_preview` | 10 | 300 | 4 | 60 | 快速预览 |
 
 四组预设均使用一阶正则化、Gaussian 基函数、非负约束和 modulus 权重。`tau_min`、`tau_max` 均为 `null`，τ 范围按每组输入 EIS 的实际频率自动生成。用户也可以完整自定义 DRT 参数。
+
+自动 τ 范围由每条 EIS 的频率范围生成，并在 `1/(2πf_max)` 至 `1/(2πf_min)` 两端各保留一个数量级的数值缓冲，以减少端点伪影。DRT 图用虚线标出频率直接支持的范围；灰色区域内的峰属于边界估计，应谨慎解释。也可自定义 `tau_min`、`tau_max`。
 
 ### 输入与输出
 
@@ -105,6 +107,7 @@ DRT 使用推荐参数
 每个样本输出：
 
 - `*_ecm.csv`：一组 ECM 参数和拟合指标
+- `*_ecm_fit.png`：原始 EIS 与 ECM 拟合的 Nyquist 比较图
 - `*_drt.csv`：DRT 数据
 - `*_drt.png`：DRT 图
 - `README_输出说明.txt`：结果说明
@@ -112,6 +115,8 @@ DRT 使用推荐参数
 未指定输出目录时，程序会在当前用户桌面自动创建 `EIS Analysis output`，并为每次分析创建独立的时间戳子文件夹。用户明确指定 `output_dir` 时使用指定位置。
 
 输出说明会记录实际 ECM 模型、DRT 预设和完整参数，以及曲线数量、成功/失败数量、频率范围、ECM 模型分布、relative RMSE、R² 和 DRT τ 范围等统计。
+
+为便于和 ZView 对照，多个串联的同类型 RC/RQ 支路统一按特征频率从高到低编号。ECM CSV 同时给出 ZView 映射列：电阻为 Ω，电感为 H（另附 μH），电容为 F，`CPE_Q` 对应 ZView 的 `CPE-T`，`CPE_n` 对应 `CPE-P`。
 
 ### 许可证
 
@@ -131,7 +136,7 @@ MCP server for ECM fitting and DRT inversion of EIS files, file lists, and folde
 Windows:
 
 ```powershell
-git clone <your GitHub repository URL>
+git clone https://github.com/ZidingWang/EIS-Analysis-mcp.git
 cd EIS-Analysis-mcp
 .\run_mcp.cmd
 ```
@@ -139,7 +144,7 @@ cd EIS-Analysis-mcp
 macOS / Linux:
 
 ```bash
-git clone <your GitHub repository URL>
+git clone https://github.com/ZidingWang/EIS-Analysis-mcp.git
 cd EIS-Analysis-mcp
 chmod +x run_mcp.sh eis-analysis.sh
 ./run_mcp.sh
@@ -161,14 +166,19 @@ The six fixed model expressions are listed above. Every fixed Warburg model keep
 
 DRT presets are `balanced` (recommended), `smooth`, `high_resolution`, and `fast_preview`. Complete custom DRT dictionaries are also accepted. All presets leave `tau_min` and `tau_max` null so the τ range is derived from each input spectrum's frequencies.
 
+The automatic tau range is derived per spectrum, with one decade of numerical padding outside `1/(2πf_max)` to `1/(2πf_min)` to reduce edge artefacts. DRT plots mark the directly frequency-supported range with dotted lines; peaks in the shaded boundary regions should be interpreted cautiously. Custom `tau_min` and `tau_max` remain available.
+
 Each sample produces:
 
 - `*_ecm.csv`
+- `*_ecm_fit.png`
 - `*_drt.csv`
 - `*_drt.png`
 - `README_输出说明.txt`
 
 When `output_dir` is omitted, the server creates `EIS Analysis output` on the current user's desktop if needed and adds a timestamped run folder. The generated README records the selected models/configuration and dataset and fit statistics.
+
+For ZView comparison, repeated series RC/RQ branches are numbered from high to low characteristic frequency. ECM CSV files include explicit aliases and units: resistance in ohm, inductance in H (plus μH), capacitance in F, `CPE_Q` as ZView `CPE-T`, and `CPE_n` as `CPE-P`.
 
 ### License
 
