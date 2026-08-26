@@ -99,11 +99,16 @@ def build_parser():
     )
 
     parser.add_argument("--drt-lambda", type=float, help="DRT regularization strength.")
+    parser.add_argument(
+        "--drt-lambda-selection",
+        choices=["mgcv", "gcv", "fixed"],
+        help="Automatic or fixed DRT regularization selection.",
+    )
     parser.add_argument("--n-tau", type=int, help="Number of DRT tau grid points.")
     parser.add_argument(
         "--n-basis",
         type=int,
-        help="Internal Gaussian basis coefficient count. Default 120; use 0 for the full n_tau system.",
+        help="Gaussian basis count. Default: one center per measured frequency; use 0 for automatic.",
     )
     parser.add_argument("--tau-min", type=float, help="Minimum tau in seconds.")
     parser.add_argument("--tau-max", type=float, help="Maximum tau in seconds.")
@@ -118,7 +123,14 @@ def build_parser():
         choices=["gaussian", "delta", "none"],
         help="DRT basis function.",
     )
-    parser.add_argument("--shape-factor", type=float, help="Gaussian DRT basis shape factor.")
+    parser.add_argument(
+        "--shape-factor", type=float,
+        help="Gaussian FWHM coefficient; FWHM equals log-tau spacing divided by this value.",
+    )
+    parser.add_argument(
+        "--tau-padding-decades", type=float,
+        help="Plot/CSV padding outside the frequency-supported tau range.",
+    )
     parser.add_argument(
         "--boundary-suppression-factor",
         type=float,
@@ -187,6 +199,10 @@ def _override_ecm_options(ecm_data, args):
 def _override_drt_options(drt_data, args):
     if args.drt_lambda is not None:
         drt_data["lambda_value"] = args.drt_lambda
+        if not args.drt_lambda_selection:
+            drt_data["lambda_selection"] = "fixed"
+    if args.drt_lambda_selection:
+        drt_data["lambda_selection"] = args.drt_lambda_selection
     if args.n_tau is not None:
         drt_data["n_tau"] = args.n_tau
     if args.n_basis is not None:
@@ -195,6 +211,8 @@ def _override_drt_options(drt_data, args):
         drt_data["tau_min"] = args.tau_min
     if args.tau_max is not None:
         drt_data["tau_max"] = args.tau_max
+    if args.tau_padding_decades is not None:
+        drt_data["tau_padding_decades"] = args.tau_padding_decades
     if args.regularization_order is not None:
         drt_data["regularization_order"] = args.regularization_order
     if args.basis_function:

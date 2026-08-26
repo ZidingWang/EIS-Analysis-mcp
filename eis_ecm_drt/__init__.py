@@ -5,7 +5,7 @@ from .drt import DRTConfig, solve_drt
 from .ecm import ECMConfig, ecm_configs_from_dict, ecm_model_presets, fit_ecm
 from .pipeline import analyze_batch, analyze_file
 
-__version__ = "0.3.2"
+__version__ = "0.3.3"
 
 __all__ = [
     "CircuitModel",

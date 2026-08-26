@@ -432,6 +432,10 @@ def _drt_result_response(result, freq_hz, z, requested_config):
             "cost": result.cost,
             "polarization_resistance_ohm": result.total_polarization_resistance,
             "n_basis_effective": result.n_basis,
+            "lambda_selected": result.lambda_value,
+            "lambda_selection": result.lambda_selection,
+            "lambda_score": result.lambda_score,
+            "normalization_ohm": result.normalization_ohm,
         },
         "r_inf_ohm": result.r_inf,
         "inductance_h": result.inductance,
@@ -439,7 +443,15 @@ def _drt_result_response(result, freq_hz, z, requested_config):
             "tau_s": result.tau.tolist(),
             "gamma_ohm": result.gamma.tolist(),
             "integration_weight": result.weights.tolist(),
+            "frequency_supported": (
+                (result.tau >= result.supported_tau_min)
+                & (result.tau <= result.supported_tau_max)
+            ).tolist(),
         },
+        "frequency_supported_tau_range_s": [
+            result.supported_tau_min,
+            result.supported_tau_max,
+        ],
         "peaks": _find_drt_peaks(result.tau, result.gamma, result.weights),
         "reconstructed": {
             "freq_hz": np.asarray(freq_hz, dtype=float).tolist(),

@@ -33,26 +33,30 @@ CUSTOM_ECM_EXAMPLES = [
 
 _DRT_SHARED = {
     "tau_min": None, "tau_max": None, "regularization_order": 1,
-    "basis_function": "gaussian", "polarization_removal": "ignore_polarization",
-    "boundary_suppression_factor": 1.0, "nonnegative": True,
+    "tau_padding_decades": 0.5, "basis_function": "gaussian",
+    "polarization_removal": "none", "boundary_suppression_factor": 0.0,
+    "nonnegative": True,
     "fit_r_inf": True, "fit_inductance": True, "weighting": "modulus",
+    "normalization": "polarization_resistance", "lambda_min": 1e-7,
+    "lambda_max": 1.0, "lambda_count": 41,
 }
 
 DRT_PRESETS = [
-    {"id": "balanced", "display_name": "Balanced / common", "description": "Common balanced analysis.",
-     "recommended": True, "config": dict(_DRT_SHARED, lambda_value=10.0, n_tau=750, shape_factor=4.5, n_basis=120)},
+    {"id": "balanced", "display_name": "Automatic mGCV / common",
+     "description": "Recommended TR-RBF analysis; mGCV selects regularization from each spectrum.",
+     "recommended": True, "config": dict(_DRT_SHARED, lambda_value=1e-3, lambda_selection="mgcv", n_tau=750, shape_factor=0.5, n_basis=None)},
     {"id": "smooth", "display_name": "Smooth / noise resistant",
-     "description": "Stronger smoothing for noisy data; may merge weak nearby peaks.",
-     "recommended": False, "config": dict(_DRT_SHARED, lambda_value=30.0, n_tau=750, shape_factor=5.0, n_basis=100)},
+     "description": "Fixed stronger regularization for noisy data; may merge weak nearby peaks.",
+     "recommended": False, "config": dict(_DRT_SHARED, lambda_value=1e-2, lambda_selection="fixed", n_tau=750, shape_factor=0.5, n_basis=None)},
     {"id": "high_resolution", "display_name": "High resolution",
-     "description": "Retains more detail with greater runtime and over-fitting risk.",
-     "recommended": False, "config": dict(_DRT_SHARED, lambda_value=3.0, n_tau=1000, shape_factor=3.0, n_basis=180)},
+     "description": "Narrower RBFs and weak fixed regularization; retains detail with more over-fitting risk.",
+     "recommended": False, "config": dict(_DRT_SHARED, lambda_value=1e-4, lambda_selection="fixed", n_tau=1000, shape_factor=0.75, n_basis=None)},
     {"id": "fast_preview", "display_name": "Fast preview", "description": "Reduced grid for quick first inspection.",
-     "recommended": False, "config": dict(_DRT_SHARED, lambda_value=10.0, n_tau=300, shape_factor=4.0, n_basis=60)},
+     "recommended": False, "config": dict(_DRT_SHARED, lambda_value=1e-3, lambda_selection="fixed", n_tau=300, shape_factor=0.5, n_basis=60)},
 ]
 
 REQUIRED_DRT_FIELDS = [
-    "lambda_value", "n_tau", "regularization_order", "basis_function", "shape_factor",
+    "lambda_value", "lambda_selection", "n_tau", "regularization_order", "basis_function", "shape_factor",
     "polarization_removal", "boundary_suppression_factor", "nonnegative", "fit_r_inf",
     "fit_inductance", "weighting",
 ]
@@ -90,22 +94,27 @@ def drt_choices_payload():
         "custom_supported": True,
         "custom_config_schema": {
             "required_fields": list(REQUIRED_DRT_FIELDS),
-            "optional_fields": ["n_basis", "tau_min", "tau_max", "max_nfev"],
+            "optional_fields": ["n_basis", "tau_min", "tau_max", "tau_padding_decades",
+                                "lambda_min", "lambda_max", "lambda_count", "normalization", "max_nfev"],
         },
         "required_fields": list(REQUIRED_DRT_FIELDS),
         "choices": {
             "basis_function": ["gaussian", "delta", "none"],
             "regularization_order": [0, 1, 2],
+            "lambda_selection": ["mgcv", "gcv", "fixed"],
             "polarization_removal": ["ignore_polarization", "none", "boundary_suppression"],
             "weighting": ["modulus", "none"],
         },
         "optional_fields": {
-            "n_basis": "Internal Gaussian basis count; null uses the full n_tau system.",
+            "n_basis": "Internal Gaussian basis count; null uses one basis center per measured frequency.",
             "tau_min": "Leave null to derive it from the highest input frequency.",
             "tau_max": "Leave null to derive it from the lowest input frequency.",
+            "tau_padding_decades": "Display padding only; coefficient support still follows the input frequency range.",
         },
         "notes": [
             "Every preset derives tau_min and tau_max from each input EIS frequency range.",
+            "n_tau controls CSV/plot sampling only; it does not add experimental resolution.",
+            "shape_factor is the Gaussian FWHM coefficient: FWHM = log-tau spacing / shape_factor.",
             "A recommended preset is not user confirmation; explicit selection is still required.",
         ],
         "selection_required": True,
@@ -123,14 +132,18 @@ def analysis_choices_payload():
 
 def drt_config_to_dict(config):
     return {
-        "lambda_value": config.lambda_value, "n_tau": config.n_tau,
+        "lambda_value": config.lambda_value, "lambda_selection": config.lambda_selection,
+        "lambda_min": config.lambda_min, "lambda_max": config.lambda_max,
+        "lambda_count": config.lambda_count, "n_tau": config.n_tau,
         "tau_min": config.tau_min, "tau_max": config.tau_max,
+        "tau_padding_decades": config.tau_padding_decades,
         "regularization_order": config.regularization_order, "basis_function": config.basis_function,
         "shape_factor": config.shape_factor, "n_basis": config.n_basis,
         "polarization_removal": config.polarization_removal,
         "boundary_suppression_factor": config.boundary_suppression_factor,
         "nonnegative": config.nonnegative, "fit_r_inf": config.fit_r_inf,
         "fit_inductance": config.fit_inductance, "weighting": config.weighting,
+        "normalization": config.normalization,
         "max_nfev": config.max_nfev,
     }
 

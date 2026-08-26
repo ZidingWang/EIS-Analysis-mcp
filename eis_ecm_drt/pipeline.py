@@ -48,14 +48,12 @@ def analyze_file(
     summary = _summary_row(stem, input_path, data, ecm_config, ecm_result, drt_config, drt_result)
 
     if make_plots:
-        supported_tau_min = 1.0 / (2.0 * np.pi * float(np.max(data.freq_hz)))
-        supported_tau_max = 1.0 / (2.0 * np.pi * float(np.min(data.freq_hz)))
         plot_drt(
             drt_result.tau,
             drt_result.gamma,
             paths["drt_plot"],
-            supported_tau_min=supported_tau_min,
-            supported_tau_max=supported_tau_max,
+            supported_tau_min=drt_result.supported_tau_min,
+            supported_tau_max=drt_result.supported_tau_max,
         )
         plot_nyquist(
             data.freq_hz,
@@ -187,12 +185,22 @@ def _summary_row(sample, input_path, data, ecm_config, ecm_result, drt_config, d
         "ecm_relative_rmse": ecm_result.metrics["relative_rmse"],
         "ecm_r2_complex": ecm_result.metrics["r2_complex"],
         "drt_lambda": drt_result.lambda_value,
+        "drt_lambda_selection": drt_result.lambda_selection,
+        "drt_lambda_score": drt_result.lambda_score,
+        "drt_normalization_ohm": drt_result.normalization_ohm,
+        "drt_reconstruction_relative_rmse": float(
+            np.sqrt(np.mean(np.abs(drt_result.z_fit - data.z) ** 2))
+            / max(float(np.median(np.abs(data.z))), 1e-30)
+        ),
         "drt_n_tau": drt_config.n_tau,
         "drt_tau_min_s": float(drt_result.tau[0]),
         "drt_tau_max_s": float(drt_result.tau[-1]),
+        "drt_supported_tau_min_s": drt_result.supported_tau_min,
+        "drt_supported_tau_max_s": drt_result.supported_tau_max,
+        "drt_tau_padding_decades": drt_config.tau_padding_decades,
         "drt_regularization_order": drt_config.regularization_order,
         "drt_basis_function": drt_config.basis_function,
-        "drt_shape_factor": drt_config.shape_factor,
+        "drt_fwhm_coefficient": drt_config.shape_factor,
         "drt_requested_n_basis": drt_config.n_basis,
         "drt_n_basis": drt_result.n_basis,
         "drt_polarization_removal": drt_config.polarization_removal,
@@ -201,6 +209,7 @@ def _summary_row(sample, input_path, data, ecm_config, ecm_result, drt_config, d
         "drt_fit_r_inf": drt_config.fit_r_inf,
         "drt_fit_inductance": drt_config.fit_inductance,
         "drt_weighting": drt_config.weighting,
+        "drt_normalization": drt_config.normalization,
         "drt_r_inf_ohm": drt_result.r_inf,
         "drt_inductance_h": drt_result.inductance,
         "drt_polarization_resistance_ohm": drt_result.total_polarization_resistance,
@@ -256,6 +265,8 @@ def _write_output_readme(
         "- 重复的串联 RC/RQ 支路按特征频率从高到低编号，便于与 ZView 对照。",
         "- ZView 参数映射: R 使用 Ohm，L 使用 H，C 使用 F，CPE_Q 对应 CPE-T，CPE_n 对应 CPE-P。",
         "- DRT 预设: %s" % preset_label,
+        "- DRT 方法: 非负 TR-RBF（实部和虚部联合拟合），正则化选择=%s。" % drt_config.lambda_selection,
+        "- 默认 tau 可识别范围由输入频率按 1/(2πf) 计算；输出网格仅用于曲线和 CSV 采样。",
         "- DRT 完整参数: %s" % json.dumps(drt_config_to_dict(drt_config), ensure_ascii=False, sort_keys=True),
         "",
         "数据统计",
@@ -286,6 +297,14 @@ def _write_output_readme(
                 ),
                 "- DRT 输出网格点数: %s"
                 % ", ".join(_format_readme_number(value) for value in statistics["drt_n_tau"]),
+                "- DRT 实际选择 λ: 最小 %s，中位数 %s，最大 %s"
+                % (
+                    _format_readme_number(statistics["drt_lambda_min"]),
+                    _format_readme_number(statistics["drt_lambda_median"]),
+                    _format_readme_number(statistics["drt_lambda_max"]),
+                ),
+                "- DRT 重构 relative RMSE 中位数: %s"
+                % _format_readme_number(statistics["drt_rmse_median"]),
             ]
         )
 
@@ -309,12 +328,14 @@ def _write_output_readme(
     for row in rows:
         if row.get("success"):
             lines.append(
-                "- %s: ECM=%s, relative_rmse=%s, R²=%s"
+                "- %s: ECM=%s, ECM relative_rmse=%s, R²=%s, DRT λ=%s, DRT relative_rmse=%s"
                 % (
                     row.get("sample", ""),
                     row.get("selected_ecm_model_name", ""),
                     _format_readme_number(row.get("ecm_relative_rmse")),
                     _format_readme_number(row.get("ecm_r2_complex")),
+                    _format_readme_number(row.get("drt_lambda")),
+                    _format_readme_number(row.get("drt_reconstruction_relative_rmse")),
                 )
             )
 
@@ -347,6 +368,8 @@ def _readme_statistics(rows):
     tau_min = values("drt_tau_min_s")
     tau_max = values("drt_tau_max_s")
     drt_n_tau = values("drt_n_tau")
+    drt_lambda = values("drt_lambda")
+    drt_rmse = values("drt_reconstruction_relative_rmse")
 
     return {
         "curve_count": len(rows),
@@ -367,6 +390,10 @@ def _readme_statistics(rows):
         "tau_min_s": float(np.min(tau_min)) if tau_min.size else None,
         "tau_max_s": float(np.max(tau_max)) if tau_max.size else None,
         "drt_n_tau": sorted({int(value) for value in drt_n_tau}),
+        "drt_lambda_min": float(np.min(drt_lambda)) if drt_lambda.size else None,
+        "drt_lambda_median": float(np.median(drt_lambda)) if drt_lambda.size else None,
+        "drt_lambda_max": float(np.max(drt_lambda)) if drt_lambda.size else None,
+        "drt_rmse_median": float(np.median(drt_rmse)) if drt_rmse.size else None,
     }
 
 

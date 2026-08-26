@@ -15,7 +15,8 @@
 
 ### 环境要求
 
-- Python 3.10 或更高版本
+- Python 3.10 或更高版本（推荐 3.10–3.13）
+- Git
 - 第一次启动需要联网安装依赖
 
 ### 安装与启动
@@ -35,9 +36,46 @@ chmod +x run_mcp.sh eis-analysis.sh
 ./run_mcp.sh
 ```
 
-第一次启动会自动创建 `.venv` 并安装依赖。
+第一次启动会自动创建 `.venv` 并安装依赖。依赖安装完成后，程序会保持运行并等待 MCP 客户端，这是 STDIO MCP 的正常状态。手动预安装时可按 `Ctrl+C` 结束，然后按下面步骤连接。
 
 ### 连接 MCP
+
+本仓库提供的是本地 STDIO MCP，可连接任何支持 STDIO MCP 的 Agent。GitHub 仓库网址是源码地址，不能作为远程 MCP URL 直接连接。
+
+#### 通用连接步骤
+
+1. 在 Agent 的 MCP 设置中添加本地服务器。
+2. 名称填写 `eis-ecm-drt`，传输类型选择 `STDIO`。
+3. Windows 启动命令使用实际仓库中的 `run_mcp.cmd`；macOS / Linux 使用 `run_mcp.sh`。
+4. 保存并重启或刷新 Agent，然后在工具列表中确认 EIS 工具已经出现。
+
+#### Codex
+
+可以打开 `设置 → MCP servers → Add server` 按上述方式添加，也可以把下面的配置加入 `~/.codex/config.toml`。
+
+Windows：
+
+```toml
+[mcp_servers.eis-ecm-drt]
+command = "cmd.exe"
+args = ["/d", "/c", 'C:\path\to\EIS-Analysis-mcp\run_mcp.cmd']
+startup_timeout_sec = 180
+tool_timeout_sec = 3600
+```
+
+macOS / Linux：
+
+```toml
+[mcp_servers.eis-ecm-drt]
+command = "/bin/sh"
+args = ["/path/to/EIS-Analysis-mcp/run_mcp.sh"]
+startup_timeout_sec = 180
+tool_timeout_sec = 3600
+```
+
+把路径改成实际仓库路径，保存后重启 Codex；输入 `/mcp` 可以检查连接。Codex 模板：[Windows](examples/codex_config_windows.toml)｜[macOS / Linux](examples/codex_config_macos_linux.toml)
+
+#### 使用 `mcpServers` JSON 的 Agent
 
 Windows 配置模板：[examples/mcp_config_windows.json](examples/mcp_config_windows.json)
 
@@ -54,7 +92,7 @@ Windows 配置模板：[examples/mcp_config_windows.json](examples/mcp_config_wi
 
 macOS / Linux 配置模板：[examples/mcp_config_macos_linux.json](examples/mcp_config_macos_linux.json)
 
-把模板中的路径改成实际仓库路径，然后在 MCP 客户端中刷新连接。
+把模板中的路径改成实际仓库路径，然后在相应 Agent 中刷新连接。
 
 ### 分析 EIS
 
@@ -89,16 +127,16 @@ DRT 使用推荐参数
 
 ### DRT 参数
 
-| DRT 预设 | λ | n_tau | shape_factor | n_basis | 用途 |
-| --- | ---: | ---: | ---: | ---: | --- |
-| `balanced`（推荐） | 10 | 750 | 4.5 | 120 | 常用平衡分析 |
-| `smooth` | 30 | 750 | 5 | 100 | 噪声数据，曲线更平滑 |
-| `high_resolution` | 3 | 1000 | 3 | 180 | 保留更多细节，耗时和过拟合风险更高 |
-| `fast_preview` | 10 | 300 | 4 | 60 | 快速预览 |
+| DRT 预设 | λ 选择 | n_tau | FWHM 系数 | n_basis | 用途 |
+| --- | --- | ---: | ---: | ---: | --- |
+| `balanced`（推荐） | mGCV 自动选择 | 750 | 0.5 | 自动 | 常用 TR-RBF 分析 |
+| `smooth` | 固定 1e-2 | 750 | 0.5 | 自动 | 噪声数据，曲线更平滑 |
+| `high_resolution` | 固定 1e-4 | 1000 | 0.75 | 自动 | 保留更多细节，过拟合风险更高 |
+| `fast_preview` | 固定 1e-3 | 300 | 0.5 | 60 | 快速预览 |
 
-四组预设均使用一阶正则化、Gaussian 基函数、非负约束和 modulus 权重。`tau_min`、`tau_max` 均为 `null`，τ 范围按每组输入 EIS 的实际频率自动生成。用户也可以完整自定义 DRT 参数。
+四组预设均使用实部/虚部联合的非负 TR-RBF、一阶 Tikhonov 正则化、Gaussian 基函数、modulus 权重和阻抗尺度归一化。推荐项使用 mGCV 为每条 EIS 自动选择 λ。`tau_min`、`tau_max` 均为 `null`，τ 范围按实际频率自动生成；用户也可以完整自定义 DRT 参数。
 
-自动 τ 范围由每条 EIS 的频率范围生成，并在 `1/(2πf_max)` 至 `1/(2πf_min)` 两端各保留一个数量级的数值缓冲，以减少端点伪影。DRT 图用虚线标出频率直接支持的范围；灰色区域内的峰属于边界估计，应谨慎解释。也可自定义 `tau_min`、`tau_max`。
+DRT 系数中心默认逐点对应实测频率的 `1/(2πf)`。`n_tau` 只控制 CSV 和图的采样密度，不增加实验分辨率。图上在直接支持范围两端各显示 0.5 decade 的曲线尾部，并用虚线标出 `1/(2πf_max)` 至 `1/(2πf_min)`；边界外只用于观察尾部，应谨慎解释。
 
 ### 输入与输出
 
@@ -128,7 +166,8 @@ MCP server for ECM fitting and DRT inversion of EIS files, file lists, and folde
 
 ### Requirements
 
-- Python 3.10 or newer
+- Python 3.10 or newer (3.10–3.13 recommended)
+- Git
 - Internet access for first-run dependency installation
 
 ### Install and start
@@ -150,7 +189,17 @@ chmod +x run_mcp.sh eis-analysis.sh
 ./run_mcp.sh
 ```
 
-Use [the Windows MCP template](examples/mcp_config_windows.json) or [the macOS/Linux template](examples/mcp_config_macos_linux.json), replace the repository path, and refresh the MCP connection.
+The first run creates `.venv` and installs the dependencies. The process then stays open waiting for an MCP client; this is expected for a STDIO server. If you ran it manually for setup, press `Ctrl+C`, then connect it as described below.
+
+### Connect an MCP client or Agent
+
+This repository provides a local STDIO MCP server for any Agent that supports STDIO MCP. The GitHub repository URL is source code, not a remote MCP server URL.
+
+Add a local MCP server named `eis-ecm-drt`, choose `STDIO`, and use `run_mcp.cmd` on Windows or `run_mcp.sh` on macOS/Linux as the start command. Replace every example path with the actual cloned repository path, then restart or refresh the Agent.
+
+For Codex, add the server through `Settings → MCP servers → Add server`, or use [the Windows Codex template](examples/codex_config_windows.toml) or [the macOS/Linux Codex template](examples/codex_config_macos_linux.toml) in `~/.codex/config.toml`. Restart Codex and enter `/mcp` to check the connection.
+
+For Agents that use the `mcpServers` JSON format, use [the Windows JSON template](examples/mcp_config_windows.json) or [the macOS/Linux JSON template](examples/mcp_config_macos_linux.json).
 
 ### Analyze EIS
 
@@ -164,9 +213,9 @@ L-R0-RWQ = L1-R0-((R1-W1)||CPE1)
 
 The six fixed model expressions are listed above. Every fixed Warburg model keeps W in series with R in the same branch, and custom parser-supported expressions are accepted.
 
-DRT presets are `balanced` (recommended), `smooth`, `high_resolution`, and `fast_preview`. Complete custom DRT dictionaries are also accepted. All presets leave `tau_min` and `tau_max` null so the τ range is derived from each input spectrum's frequencies.
+DRT presets are `balanced` (recommended automatic mGCV), `smooth`, `high_resolution`, and `fast_preview`. The solver uses non-negative combined real/imaginary TR-RBF inversion with impedance-scale normalization. Complete custom DRT dictionaries are also accepted.
 
-The automatic tau range is derived per spectrum, with one decade of numerical padding outside `1/(2πf_max)` to `1/(2πf_min)` to reduce edge artefacts. DRT plots mark the directly frequency-supported range with dotted lines; peaks in the shaded boundary regions should be interpreted cautiously. Custom `tau_min` and `tau_max` remain available.
+RBF centers follow the measured `1/(2πf)` points by default. `n_tau` controls only CSV/plot sampling. Plots show 0.5 decade of curve tails outside the directly supported `1/(2πf_max)` to `1/(2πf_min)` range and mark those limits with dotted lines. Custom `tau_min` and `tau_max` remain available.
 
 Each sample produces:
 
